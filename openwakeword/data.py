@@ -37,7 +37,7 @@ import acoustics
 
 
 # Load audio clips and structure into clips of the same length
-def stack_clips(audio_data, clip_size=16000*2):
+def stack_clips(audio_data, clip_size=16000 * 2):
     """
     Takes an input list of 1D arrays (of different lengths), concatenates them together,
     and then extracts clips of a uniform size by dividing the combined array.
@@ -56,7 +56,7 @@ def stack_clips(audio_data, clip_size=16000*2):
     # Get chunks of the specified size
     new_examples = []
     for i in range(0, combined_data.shape[0], clip_size):
-        chunk = combined_data[i:i+clip_size]
+        chunk = combined_data[i : i + clip_size]
         if chunk.shape[0] != clip_size:
             chunk = np.hstack((chunk, np.zeros(clip_size - chunk.shape[0])))
         new_examples.append(chunk)
@@ -90,7 +90,7 @@ def load_audio_clips(files, clip_size=32000):
             continue
 
     # Get shape of output array
-    N = sum([i.shape[0] for i in audio_data])//clip_size
+    N = sum([i.shape[0] for i in audio_data]) // clip_size
     X = np.empty((N, clip_size))
 
     # Add audio data to rows
@@ -106,7 +106,7 @@ def load_audio_clips(files, clip_size=32000):
         previous_row_remainder = row if row.size > 0 else None
 
     # Convert to 16-bit PCM data
-    X = (X*32767).astype(np.int16)
+    X = (X * 32767).astype(np.int16)
 
     return X
 
@@ -117,9 +117,9 @@ def load_audio_clips(files, clip_size=32000):
 # Convert clips with sox
 def _convert_clip(input_file, output_file, backend="ffmpeg"):
     if backend == "sox":
-        cmd = f"sox \"{input_file}\" -G -r 16000 -c 1 -b 16 \"{output_file}\""
+        cmd = f'sox "{input_file}" -G -r 16000 -c 1 -b 16 "{output_file}"'
     elif backend == "ffmpeg":
-        cmd = f"ffmpeg -y -i \"{input_file}\" -ar 16000 \"{output_file}\""
+        cmd = f'ffmpeg -y -i "{input_file}" -ar 16000 "{output_file}"'
     os.system(cmd)
     return None
 
@@ -150,7 +150,13 @@ def convert_clips(input_files, output_files, sr=16000, ncpu=1, backend="ffmpeg")
     pool.starmap(f, [(i, j) for i, j in zip(input_files, output_files)])
 
 
-def filter_audio_paths(target_dirs, min_length_secs, max_length_secs, duration_method="size", glob_filter=None):
+def filter_audio_paths(
+    target_dirs,
+    min_length_secs,
+    max_length_secs,
+    duration_method="size",
+    glob_filter=None,
+):
     """
     Gets the paths of wav files in flat target directories, automatically filtering
     out files below/above the specified length (in seconds). Assumes that all
@@ -196,7 +202,11 @@ def filter_audio_paths(target_dirs, min_length_secs, max_length_secs, duration_m
             durations.extend([get_clip_duration(i) for i in tqdm(dir_paths)])
 
     if durations != []:
-        filtered = [(i, j) for i, j in zip(file_paths, durations) if j >= min_length_secs and j <= max_length_secs]
+        filtered = [
+            (i, j)
+            for i, j in zip(file_paths, durations)
+            if j >= min_length_secs and j <= max_length_secs
+        ]
         return [i[0] for i in filtered], [i[1] for i in filtered]
     else:
         return file_paths, []
@@ -221,12 +231,14 @@ def estimate_clip_duration(audio_files: list, sizes: list):
 
     # Caculate any correction factors needed from the first file
     details = mutagen.File(audio_files[0])
-    correction = 8*os.path.getsize(audio_files[0]) - details.info.bitrate*details.info.length
+    correction = (
+        8 * os.path.getsize(audio_files[0]) - details.info.bitrate * details.info.length
+    )
 
     # Estimate duration for all remaining clips from file size only
     durations = []
     for size in sizes:
-        durations.append((size*8-correction)/details.info.bitrate)
+        durations.append((size * 8 - correction) / details.info.bitrate)
 
     return durations
 
@@ -245,7 +257,7 @@ def estimate_mp3_duration(fpath):
 
     conversion_factors = {
         "16_khz_single_channel": 0.000333318208471784,
-        "16_khz_stereo": 0.000333318208471784/2
+        "16_khz_stereo": 0.000333318208471784 / 2,
     }
 
     duration_seconds = 0
@@ -257,10 +269,10 @@ def estimate_mp3_duration(fpath):
     nbytes = os.path.getsize(fpath)
     if md.num_channels == 1:
         if md.sample_rate == 16000:
-            duration_seconds = nbytes*conversion_factors["16_khz_single_channel"]
+            duration_seconds = nbytes * conversion_factors["16_khz_single_channel"]
     elif md.num_channels == 2:
         if md.sample_rate == 16000:
-            duration_seconds = nbytes*conversion_factors["16_khz_stereo"]
+            duration_seconds = nbytes * conversion_factors["16_khz_stereo"]
 
     return duration_seconds
 
@@ -272,7 +284,7 @@ def get_clip_duration(clip):
     except RuntimeError:  # skip cases where file metadata can't be read
         return 0
 
-    return metadata.num_frames/metadata.sample_rate
+    return metadata.num_frames / metadata.sample_rate
 
 
 def get_wav_duration_from_filesize(size, nbytes=2):
@@ -287,31 +299,31 @@ def get_wav_duration_from_filesize(size, nbytes=2):
     Returns:
         float: The duration of the audio file in seconds
     """
-    return (size-44)/nbytes/16000
+    return (size - 44) / nbytes / 16000
 
 
 # Data augmentation utility function
 def mix_clips_batch(
-        foreground_clips: List[str],
-        background_clips: List[str],
-        combined_size: int,
-        labels: List[int] = [],
-        batch_size: int = 32,
-        snr_low: float = 0,
-        snr_high: float = 0,
-        start_index: List[int] = [],
-        foreground_durations: List[float] = [],
-        foreground_truncate_strategy: str = "random",
-        rirs: List[str] = [],
-        rir_probability: int = 1,
-        volume_augmentation: bool = True,
-        generated_noise_augmentation: float = 0.0,
-        shuffle: bool = True,
-        return_sequence_labels: bool = False,
-        return_background_clips: bool = False,
-        return_background_clips_delay: Tuple[int, int] = (0, 0),
-        seed: int = 0
-        ):
+    foreground_clips: List[str],
+    background_clips: List[str],
+    combined_size: int,
+    labels: List[int] = [],
+    batch_size: int = 32,
+    snr_low: float = 0,
+    snr_high: float = 0,
+    start_index: List[int] = [],
+    foreground_durations: List[float] = [],
+    foreground_truncate_strategy: str = "random",
+    rirs: List[str] = [],
+    rir_probability: int = 1,
+    volume_augmentation: bool = True,
+    generated_noise_augmentation: float = 0.0,
+    shuffle: bool = True,
+    return_sequence_labels: bool = False,
+    return_background_clips: bool = False,
+    return_background_clips_delay: Tuple[int, int] = (0, 0),
+    seed: int = 0,
+):
     """
     Mixes foreground and background clips at a random SNR level in batches.
 
@@ -373,14 +385,16 @@ def mix_clips_batch(
 
     # Check and Set start indices, if needed
     if not start_index:
-        start_index = [0]*batch_size
+        start_index = [0] * batch_size
     else:
         if min(start_index) < 0:
-            raise ValueError("Error! At least one value of the `start_index` argument is <0. Check your inputs.")
+            raise ValueError(
+                "Error! At least one value of the `start_index` argument is <0. Check your inputs."
+            )
 
     # Make dummy labels
     if not labels:
-        labels = [0]*len(foreground_clips)
+        labels = [0] * len(foreground_clips)
 
     if shuffle:
         p = np.random.permutation(len(foreground_clips))
@@ -393,47 +407,76 @@ def mix_clips_batch(
     for i in range(0, len(foreground_clips), batch_size):
         # Load foreground clips/start indices and truncate as needed
         sr = 16000
-        start_index_batch = start_index[i:i+batch_size]
-        foreground_clips_batch = [read_audio(j) for j in foreground_clips[i:i+batch_size]]
-        foreground_clips_batch = [j[0] if len(j.shape) > 1 else j for j in foreground_clips_batch]
+        start_index_batch = start_index[i : i + batch_size]
+        foreground_clips_batch = [
+            read_audio(j) for j in foreground_clips[i : i + batch_size]
+        ]
+        foreground_clips_batch = [
+            j[0] if len(j.shape) > 1 else j for j in foreground_clips_batch
+        ]
         if foreground_durations:
-            foreground_clips_batch = [truncate_clip(j, int(k*sr), foreground_truncate_strategy)
-                                      for j, k in zip(foreground_clips_batch, foreground_durations[i:i+batch_size])]
-        labels_batch = np.array(labels[i:i+batch_size])
+            foreground_clips_batch = [
+                truncate_clip(j, int(k * sr), foreground_truncate_strategy)
+                for j, k in zip(
+                    foreground_clips_batch, foreground_durations[i : i + batch_size]
+                )
+            ]
+        labels_batch = np.array(labels[i : i + batch_size])
 
         # Load background clips and pad/truncate as needed
-        background_clips_batch = [read_audio(j) for j in random.sample(background_clips, batch_size)]
-        background_clips_batch = [j[0] if len(j.shape) > 1 else j for j in background_clips_batch]
+        background_clips_batch = [
+            read_audio(j) for j in random.sample(background_clips, batch_size)
+        ]
+        background_clips_batch = [
+            j[0] if len(j.shape) > 1 else j for j in background_clips_batch
+        ]
         background_clips_batch_delayed = []
-        delay = np.random.randint(return_background_clips_delay[0], return_background_clips_delay[1] + 1)
+        delay = np.random.randint(
+            return_background_clips_delay[0], return_background_clips_delay[1] + 1
+        )
         for ndx, background_clip in enumerate(background_clips_batch):
             if background_clip.shape[0] < (combined_size + delay):
                 repeated = background_clip.repeat(
-                    np.ceil((combined_size + delay)/background_clip.shape[0]).astype(np.int32)
+                    np.ceil((combined_size + delay) / background_clip.shape[0]).astype(
+                        np.int32
+                    )
                 )
                 background_clips_batch[ndx] = repeated[0:combined_size]
-                background_clips_batch_delayed.append(repeated[0+delay:combined_size + delay].clone())
+                background_clips_batch_delayed.append(
+                    repeated[0 + delay : combined_size + delay].clone()
+                )
             elif background_clip.shape[0] > (combined_size + delay):
-                r = np.random.randint(0, max(1, background_clip.shape[0] - combined_size - delay))
-                background_clips_batch[ndx] = background_clip[r:r + combined_size]
-                background_clips_batch_delayed.append(background_clip[r+delay:r + combined_size + delay].clone())
+                r = np.random.randint(
+                    0, max(1, background_clip.shape[0] - combined_size - delay)
+                )
+                background_clips_batch[ndx] = background_clip[r : r + combined_size]
+                background_clips_batch_delayed.append(
+                    background_clip[r + delay : r + combined_size + delay].clone()
+                )
 
         # Mix clips at snr levels
         snrs_db = np.random.uniform(snr_low, snr_high, batch_size)
         mixed_clips = []
         sequence_labels = []
-        for fg, bg, snr, start in zip(foreground_clips_batch, background_clips_batch,
-                                      snrs_db, start_index_batch):
+        for fg, bg, snr, start in zip(
+            foreground_clips_batch, background_clips_batch, snrs_db, start_index_batch
+        ):
             if bg.shape[0] != combined_size:
                 raise ValueError(bg.shape)
             mixed_clip = mix_clip(fg, bg, snr, start)
-            sequence_labels.append(get_frame_labels(combined_size, start, start+fg.shape[0]))
+            sequence_labels.append(
+                get_frame_labels(combined_size, start, start + fg.shape[0])
+            )
 
             if np.random.random() < generated_noise_augmentation:
                 noise_color = ["white", "pink", "blue", "brown", "violet"]
-                noise_clip = acoustics.generator.noise(combined_size, color=np.random.choice(noise_color))
-                noise_clip = torch.from_numpy(noise_clip/noise_clip.max())
-                mixed_clip = mix_clip(mixed_clip, noise_clip, np.random.choice(snrs_db), 0)
+                noise_clip = acoustics.generator.noise(
+                    combined_size, color=np.random.choice(noise_color)
+                )
+                noise_clip = torch.from_numpy(noise_clip / noise_clip.max())
+                mixed_clip = mix_clip(
+                    mixed_clip, noise_clip, np.random.choice(snrs_db), 0
+                )
 
             mixed_clips.append(mixed_clip)
 
@@ -443,24 +486,30 @@ def mix_clips_batch(
         # Apply reverberation to the batch (from a single RIR file)
         if rirs:
             if np.random.random() <= rir_probability:
-                rir_waveform, sr = torchaudio.load(random.choice(rirs))
+                rir_waveform, sr = torchaudio.load(
+                    random.choice(rirs), backend="soundfile"
+                )
                 if rir_waveform.shape[0] > 1:
-                    rir_waveform = rir_waveform[random.randint(0, rir_waveform.shape[0]-1), :]
-                mixed_clips_batch = reverberate(mixed_clips_batch, rir_waveform, rescale_amp="avg")
+                    rir_waveform = rir_waveform[
+                        random.randint(0, rir_waveform.shape[0] - 1), :
+                    ]
+                mixed_clips_batch = reverberate(
+                    mixed_clips_batch, rir_waveform, rescale_amp="avg"
+                )
 
         # Apply volume augmentation
         if volume_augmentation:
             volume_levels = np.random.uniform(0.02, 1.0, mixed_clips_batch.shape[0])
-            mixed_clips_batch = (volume_levels/mixed_clips_batch.max(dim=1)[0])[..., None]*mixed_clips_batch
+            mixed_clips_batch = (volume_levels / mixed_clips_batch.max(dim=1)[0])[
+                ..., None
+            ] * mixed_clips_batch
         else:
             # Normalize clips only if max value is outside of [-1, 1]
-            abs_max, _ = torch.max(
-                torch.abs(mixed_clips_batch), dim=1, keepdim=True
-            )
+            abs_max, _ = torch.max(torch.abs(mixed_clips_batch), dim=1, keepdim=True)
             mixed_clips_batch = mixed_clips_batch / abs_max.clamp(min=1.0)
 
         # Convert to 16-bit PCM audio
-        mixed_clips_batch = (mixed_clips_batch.numpy()*32767).astype(np.int16)
+        mixed_clips_batch = (mixed_clips_batch.numpy() * 32767).astype(np.int16)
 
         # Remove any clips that are silent (happens rarely when mixing/reverberating)
         error_index = torch.from_numpy(np.where(mixed_clips_batch.max(dim=1) != 0)[0])
@@ -469,22 +518,29 @@ def mix_clips_batch(
         sequence_labels_batch = sequence_labels_batch[error_index]
 
         if not return_background_clips:
-            yield mixed_clips_batch, labels_batch if not return_sequence_labels else sequence_labels_batch, None
+            yield (
+                mixed_clips_batch,
+                labels_batch if not return_sequence_labels else sequence_labels_batch,
+                None,
+            )
         else:
-            background_clips_batch_delayed = (torch.vstack(background_clips_batch_delayed).numpy()
-                                              * 32767).astype(np.int16)[error_index]
-            yield (mixed_clips_batch,
-                   labels_batch if not return_sequence_labels else sequence_labels_batch,
-                   background_clips_batch_delayed)
+            background_clips_batch_delayed = (
+                torch.vstack(background_clips_batch_delayed).numpy() * 32767
+            ).astype(np.int16)[error_index]
+            yield (
+                mixed_clips_batch,
+                labels_batch if not return_sequence_labels else sequence_labels_batch,
+                background_clips_batch_delayed,
+            )
 
 
 def get_frame_labels(combined_size, start, end, buffer=1):
-    sequence_label = np.zeros(np.ceil((combined_size-12400)/1280).astype(int))
+    sequence_label = np.zeros(np.ceil((combined_size - 12400) / 1280).astype(int))
     frame_positions = np.arange(12400, combined_size, 1280)
     start_frame = np.argmin(abs(frame_positions - start))
     end_frame = np.argmin(abs(frame_positions - end))
-    sequence_label[start_frame:start_frame+2] = 1
-    sequence_label[end_frame-1:end_frame+1] = 1
+    sequence_label[start_frame : start_frame + 2] = 1
+    sequence_label[end_frame - 1 : end_frame + 1] = 1
     return sequence_label
 
 
@@ -492,7 +548,7 @@ def mix_clip(fg, bg, snr, start):
     fg_rms, bg_rms = fg.norm(p=2), bg.norm(p=2)
     snr = 10 ** (snr / 20)
     scale = snr * bg_rms / fg_rms
-    bg[start:start + fg.shape[0]] = bg[start:start + fg.shape[0]] + scale*fg
+    bg[start : start + fg.shape[0]] = bg[start : start + fg.shape[0]] + scale * fg
     return bg / 2
 
 
@@ -514,15 +570,15 @@ def truncate_clip(x, max_size, method="truncate_start"):
     """
     if x.shape[0] > max_size:
         if method == "truncate_start":
-            x = x[x.shape[0] - max_size:]
+            x = x[x.shape[0] - max_size :]
         if method == "truncate_end":
             x = x[0:max_size]
         if method == "truncate_both":
-            n = int(np.ceil(x.shape[0] - max_size)/2)
+            n = int(np.ceil(x.shape[0] - max_size) / 2)
             x = x[n:-n][0:max_size]
         if method == "random":
             rn = np.random.randint(0, x.shape[0] - max_size)
-            x = x[rn:rn + max_size]
+            x = x[rn : rn + max_size]
 
     return x
 
@@ -542,13 +598,15 @@ def apply_reverb(x, rir_files):
         nd.array: The reverberated audio clips
     """
     if isinstance(rir_files, str):
-        rir_waveform, sr = torchaudio.load(rir_files[0])
+        rir_waveform, sr = torchaudio.load(rir_files[0], backend="soundfile")
     elif isinstance(rir_files, list):
-        rir_waveform, sr = torchaudio.load(random.choice(rir_files))
+        rir_waveform, sr = torchaudio.load(
+            random.choice(rir_files), backend="soundfile"
+        )
 
     # Apply reverberation to the batch (from a single RIR file)
     if rir_waveform.shape[0] > 1:
-        rir_waveform = rir_waveform[random.randint(0, rir_waveform.shape[0]-1), :]
+        rir_waveform = rir_waveform[random.randint(0, rir_waveform.shape[0] - 1), :]
     reverbed = reverberate(torch.from_numpy(x), rir_waveform, rescale_amp="avg")
 
     return reverbed.numpy()
@@ -556,23 +614,23 @@ def apply_reverb(x, rir_files):
 
 # Alternate data augmentation method using audiomentations library (https://pypi.org/project/audiomentations/)
 def augment_clips(
-        clip_paths: List[str],
-        total_length: int,
-        sr: int = 16000,
-        batch_size: int = 128,
-        augmentation_probabilities: dict = {
-            "SevenBandParametricEQ": 0.25,
-            "TanhDistortion": 0.25,
-            "PitchShift": 0.25,
-            "BandStopFilter": 0.25,
-            "AddColoredNoise": 0.25,
-            "AddBackgroundNoise": 0.75,
-            "Gain": 1.0,
-            "RIR": 0.5
-        },
-        background_clip_paths: List[str] = [],
-        RIR_paths: List[str] = []
-        ):
+    clip_paths: List[str],
+    total_length: int,
+    sr: int = 16000,
+    batch_size: int = 128,
+    augmentation_probabilities: dict = {
+        "SevenBandParametricEQ": 0.25,
+        "TanhDistortion": 0.25,
+        "PitchShift": 0.25,
+        "BandStopFilter": 0.25,
+        "AddColoredNoise": 0.25,
+        "AddBackgroundNoise": 0.75,
+        "Gain": 1.0,
+        "RIR": 0.5,
+    },
+    background_clip_paths: List[str] = [],
+    RIR_paths: List[str] = [],
+):
     """
     Applies audio augmentations to the specified audio clips, returning a generator that applies
     the augmentations in batches to support very large quantities of input audio files.
@@ -614,64 +672,88 @@ def augment_clips(
     # Define augmentations
 
     # First pass augmentations that can't be done as a batch
-    augment1 = audiomentations.Compose([
-        audiomentations.SevenBandParametricEQ(min_gain_db=-6, max_gain_db=6, p=augmentation_probabilities["SevenBandParametricEQ"]),
-        audiomentations.TanhDistortion(
-            min_distortion=0.0001,
-            max_distortion=0.10,
-            p=augmentation_probabilities["TanhDistortion"]
-        ),
-    ])
+    augment1 = audiomentations.Compose(
+        [
+            audiomentations.SevenBandParametricEQ(
+                min_gain_db=-6,
+                max_gain_db=6,
+                p=augmentation_probabilities["SevenBandParametricEQ"],
+            ),
+            audiomentations.TanhDistortion(
+                min_distortion=0.0001,
+                max_distortion=0.10,
+                p=augmentation_probabilities["TanhDistortion"],
+            ),
+        ]
+    )
 
     # Augmentations that can be done as a batch
     if background_clip_paths != []:
-        augment2 = torch_audiomentations.Compose([
-            torch_audiomentations.PitchShift(
-                min_transpose_semitones=-3,
-                max_transpose_semitones=3,
-                p=augmentation_probabilities["PitchShift"],
-                sample_rate=16000,
-                mode="per_batch"
-            ),
-            torch_audiomentations.BandStopFilter(p=augmentation_probabilities["BandStopFilter"], mode="per_batch"),
-            torch_audiomentations.AddColoredNoise(
-                min_snr_in_db=10, max_snr_in_db=30,
-                min_f_decay=-1, max_f_decay=2, p=augmentation_probabilities["AddColoredNoise"],
-                mode="per_batch"
-            ),
-            torch_audiomentations.AddBackgroundNoise(
-                p=augmentation_probabilities["AddBackgroundNoise"],
-                background_paths=background_clip_paths,
-                min_snr_in_db=-10,
-                max_snr_in_db=15,
-                mode="per_batch"
-            ),
-            torch_audiomentations.Gain(max_gain_in_db=0, p=augmentation_probabilities["Gain"]),
-        ])
+        augment2 = torch_audiomentations.Compose(
+            [
+                torch_audiomentations.PitchShift(
+                    min_transpose_semitones=-3,
+                    max_transpose_semitones=3,
+                    p=augmentation_probabilities["PitchShift"],
+                    sample_rate=16000,
+                    mode="per_batch",
+                ),
+                torch_audiomentations.BandStopFilter(
+                    p=augmentation_probabilities["BandStopFilter"], mode="per_batch"
+                ),
+                torch_audiomentations.AddColoredNoise(
+                    min_snr_in_db=10,
+                    max_snr_in_db=30,
+                    min_f_decay=-1,
+                    max_f_decay=2,
+                    p=augmentation_probabilities["AddColoredNoise"],
+                    mode="per_batch",
+                ),
+                torch_audiomentations.AddBackgroundNoise(
+                    p=augmentation_probabilities["AddBackgroundNoise"],
+                    background_paths=background_clip_paths,
+                    min_snr_in_db=-10,
+                    max_snr_in_db=15,
+                    mode="per_batch",
+                ),
+                torch_audiomentations.Gain(
+                    max_gain_in_db=0, p=augmentation_probabilities["Gain"]
+                ),
+            ]
+        )
     else:
-        augment2 = torch_audiomentations.Compose([
-            torch_audiomentations.PitchShift(
-                min_transpose_semitones=-3,
-                max_transpose_semitones=3,
-                p=augmentation_probabilities["PitchShift"],
-                sample_rate=16000,
-                mode="per_batch"
-            ),
-            torch_audiomentations.BandStopFilter(p=augmentation_probabilities["BandStopFilter"], mode="per_batch"),
-            torch_audiomentations.AddColoredNoise(
-                min_snr_in_db=10, max_snr_in_db=30,
-                min_f_decay=-1, max_f_decay=2, p=augmentation_probabilities["AddColoredNoise"],
-                mode="per_batch"
-            ),
-            torch_audiomentations.Gain(max_gain_in_db=0, p=augmentation_probabilities["Gain"]),
-        ])
+        augment2 = torch_audiomentations.Compose(
+            [
+                torch_audiomentations.PitchShift(
+                    min_transpose_semitones=-3,
+                    max_transpose_semitones=3,
+                    p=augmentation_probabilities["PitchShift"],
+                    sample_rate=16000,
+                    mode="per_batch",
+                ),
+                torch_audiomentations.BandStopFilter(
+                    p=augmentation_probabilities["BandStopFilter"], mode="per_batch"
+                ),
+                torch_audiomentations.AddColoredNoise(
+                    min_snr_in_db=10,
+                    max_snr_in_db=30,
+                    min_f_decay=-1,
+                    max_f_decay=2,
+                    p=augmentation_probabilities["AddColoredNoise"],
+                    mode="per_batch",
+                ),
+                torch_audiomentations.Gain(
+                    max_gain_in_db=0, p=augmentation_probabilities["Gain"]
+                ),
+            ]
+        )
 
     # Iterate through all clips and augment them
     for i in range(0, len(clip_paths), batch_size):
-        batch = clip_paths[i:i+batch_size]
+        batch = clip_paths[i : i + batch_size]
         augmented_clips = []
         for clip in batch:
-            clip_data, clip_sr = torchaudio.load(clip)
+            clip_data, clip_sr = torchaudio.load(clip, backend="soundfile")
             clip_data = clip_data[0]
             if clip_data.shape[0] > total_length:
                 clip_data = clip_data[0:total_length]
@@ -682,22 +764,31 @@ def augment_clips(
             clip_data = create_fixed_size_clip(clip_data, total_length, clip_sr)
 
             # Do first pass augmentations
-            augmented_clips.append(torch.from_numpy(augment1(samples=clip_data, sample_rate=sr)))
+            augmented_clips.append(
+                torch.from_numpy(augment1(samples=clip_data, sample_rate=sr))
+            )
 
         # Do second pass augmentations
-        device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        augmented_batch = augment2(samples=torch.vstack(augmented_clips).unsqueeze(dim=1).to(device), sample_rate=sr).squeeze(axis=1)
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        augmented_batch = augment2(
+            samples=torch.vstack(augmented_clips).unsqueeze(dim=1).to(device),
+            sample_rate=sr,
+        ).squeeze(axis=1)
 
         # Do reverberation
         if augmentation_probabilities["RIR"] >= np.random.random() and RIR_paths != []:
-            rir_waveform, sr = torchaudio.load(random.choice(RIR_paths))
-            augmented_batch = reverberate(augmented_batch.cpu(), rir_waveform, rescale_amp="avg")
+            rir_waveform, sr = torchaudio.load(
+                random.choice(RIR_paths), backend="soundfile"
+            )
+            augmented_batch = reverberate(
+                augmented_batch.cpu(), rir_waveform, rescale_amp="avg"
+            )
 
         # yield batch of 16-bit PCM audio data
-        yield (augmented_batch.cpu().numpy()*32767).astype(np.int16)
+        yield (augmented_batch.cpu().numpy() * 32767).astype(np.int16)
 
 
-def create_fixed_size_clip(x, n_samples, sr=16000, start=None, end_jitter=.200):
+def create_fixed_size_clip(x, n_samples, sr=16000, start=None, end_jitter=0.200):
     """
     Create a fixed-length clip of the specified size by padding an input clip with zeros
     Optionally specify the start/end position of the input clip, or let it be chosen randomly.
@@ -714,9 +805,9 @@ def create_fixed_size_clip(x, n_samples, sr=16000, start=None, end_jitter=.200):
         ndarray: A new array of audio data of the specified length
     """
     dat = np.zeros(n_samples)
-    end_jitter = int(np.random.uniform(0, end_jitter)*sr)
+    end_jitter = int(np.random.uniform(0, end_jitter) * sr)
     if start is None:
-        start = max(0, n_samples - (int(len(x))+end_jitter))
+        start = max(0, n_samples - (int(len(x)) + end_jitter))
 
     if len(x) > n_samples:
         if np.random.random() >= 0.5:
@@ -724,7 +815,7 @@ def create_fixed_size_clip(x, n_samples, sr=16000, start=None, end_jitter=.200):
         else:
             dat = x[-n_samples:].numpy()
     else:
-        dat[start:start+len(x)] = x
+        dat[start : start + len(x)] = x
 
     return dat
 
@@ -738,14 +829,16 @@ class mmap_batch_generator:
     by the `n_per_class` initialization argument. When a mmaped numpy array has been
     fully interated over, it will restart at the zeroth index automatically.
     """
-    def __init__(self,
-                 data_files: dict,
-                 label_files: dict = {},
-                 batch_size: int = 128,
-                 n_per_class: dict = {},
-                 data_transform_funcs: dict = {},
-                 label_transform_funcs: dict = {}
-                 ):
+
+    def __init__(
+        self,
+        data_files: dict,
+        label_files: dict = {},
+        batch_size: int = 128,
+        n_per_class: dict = {},
+        data_transform_funcs: dict = {},
+        label_transform_funcs: dict = {},
+    ):
         """
         Initialize the generator object
 
@@ -785,10 +878,14 @@ class mmap_batch_generator:
         self.label_transform_funcs = label_transform_funcs
 
         # Get array mmaps and store their shapes (but load files < 1 GB total size into memory)
-        self.data = {label: np.load(fl, mmap_mode='r') for label, fl in data_files.items()}
+        self.data = {
+            label: np.load(fl, mmap_mode="r") for label, fl in data_files.items()
+        }
         self.labels = {label: np.load(fl) for label, fl in label_files.items()}
         self.data_counter = {label: 0 for label in data_files.keys()}
-        self.original_shapes = {label: self.data[label].shape for label in self.data.keys()}
+        self.original_shapes = {
+            label: self.data[label].shape for label in self.data.keys()
+        }
         self.shapes = {label: self.data[label].shape for label in self.data.keys()}
 
         # # Update effective shape of mmap array based on user-provided transforms (currently broken)
@@ -802,16 +899,20 @@ class mmap_batch_generator:
         if not self.n_per_class:
             self.n_per_class = {}
             for lbl, shape in self.shapes.items():
-                dummy_data = np.random.random((10, self.shapes[lbl][1], self.shapes[lbl][2]))
-                if (transform_func := self.data_transform_funcs.get(lbl, None)):
-                    scale_factor = transform_func(dummy_data).shape[0]/10
+                dummy_data = np.random.random(
+                    (10, self.shapes[lbl][1], self.shapes[lbl][2])
+                )
+                if transform_func := self.data_transform_funcs.get(lbl, None):
+                    scale_factor = transform_func(dummy_data).shape[0] / 10
 
-                ratio = self.shapes[lbl][0]/sum([i[0] for i in self.shapes.values()])
-                self.n_per_class[lbl] = max(1, int(int(batch_size*ratio)/scale_factor))
+                ratio = self.shapes[lbl][0] / sum([i[0] for i in self.shapes.values()])
+                self.n_per_class[lbl] = max(
+                    1, int(int(batch_size * ratio) / scale_factor)
+                )
 
             # Get estimated batches per epoch, including the effect of any user-provided transforms
-            batch_size = sum([val*scale_factor for val in self.n_per_class.values()])
-            batches_per_epoch = sum([i[0] for i in self.shapes.values()])//batch_size
+            batch_size = sum([val * scale_factor for val in self.n_per_class.values()])
+            batches_per_epoch = sum([i[0] for i in self.shapes.values()]) // batch_size
             self.batch_per_epoch = batches_per_epoch
             print("Batches/steps per epoch:", batches_per_epoch)
 
@@ -828,7 +929,9 @@ class mmap_batch_generator:
                     self.data_counter[label] = 0
 
                 # Get data from mmaped file
-                x = self.data[label][self.data_counter[label]:self.data_counter[label]+n]
+                x = self.data[label][
+                    self.data_counter[label] : self.data_counter[label] + n
+                ]
                 self.data_counter[label] += x.shape[0]
 
                 # Transform data
@@ -837,9 +940,11 @@ class mmap_batch_generator:
 
                 # Make labels for data (following whatever the current shape of `x` is)
                 if self.label_files.get(label, None):
-                    y_batch = self.labels[label][self.data_counter[label]:self.data_counter[label]+n]
+                    y_batch = self.labels[label][
+                        self.data_counter[label] : self.data_counter[label] + n
+                    ]
                 else:
-                    y_batch = [label]*x.shape[0]
+                    y_batch = [label] * x.shape[0]
 
                 # Transform labels
                 if self.label_transform_funcs and self.label_transform_funcs.get(label):
@@ -865,7 +970,7 @@ def trim_mmap(mmap_path):
         None
     """
     # Identify the last full row in the mmaped file
-    mmap_file1 = np.load(mmap_path, mmap_mode='r')
+    mmap_file1 = np.load(mmap_path, mmap_mode="r")
     i = -1
     while np.all(mmap_file1[i, :, :] == 0):
         i -= 1
@@ -874,15 +979,23 @@ def trim_mmap(mmap_path):
 
     # Create new mmap_file and copy over data in batches
     output_file2 = mmap_path.strip(".npy") + "2.npy"
-    mmap_file2 = open_memmap(output_file2, mode='w+', dtype=np.float32,
-                             shape=(N_new, mmap_file1.shape[1], mmap_file1.shape[2]))
+    mmap_file2 = open_memmap(
+        output_file2,
+        mode="w+",
+        dtype=np.float32,
+        shape=(N_new, mmap_file1.shape[1], mmap_file1.shape[2]),
+    )
 
-    for i in tqdm(range(0, mmap_file1.shape[0], 1024), total=mmap_file1.shape[0]//1024, desc="Trimming empty rows"):
+    for i in tqdm(
+        range(0, mmap_file1.shape[0], 1024),
+        total=mmap_file1.shape[0] // 1024,
+        desc="Trimming empty rows",
+    ):
         if i + 1024 > N_new:
             mmap_file2[i:N_new] = mmap_file1[i:N_new].copy()
             mmap_file2.flush()
         else:
-            mmap_file2[i:i+1024] = mmap_file1[i:i+1024].copy()
+            mmap_file2[i : i + 1024] = mmap_file1[i : i + 1024].copy()
             mmap_file2.flush()
 
     # Remove old mmaped file
@@ -893,7 +1006,12 @@ def trim_mmap(mmap_path):
 
 
 # Generate words that sound similar ("adversarial") to the input phrase using phoneme overlap
-def generate_adversarial_texts(input_text: str, N: int, include_partial_phrase: float = 0, include_input_words: float = 0):
+def generate_adversarial_texts(
+    input_text: str,
+    N: int,
+    include_partial_phrase: float = 0,
+    include_input_words: float = 0,
+):
     """
     Generate adversarial words and phrases based on phoneme overlap.
     Currently only works for english texts.
@@ -917,19 +1035,50 @@ def generate_adversarial_texts(input_text: str, N: int, include_partial_phrase: 
               to the input text.
     """
     # Get phonemes for english vowels (CMUDICT labels)
-    vowel_phones = ["AA", "AE", "AH", "AO", "AW", "AX", "AXR", "AY", "EH", "ER", "EY", "IH", "IX", "IY", "OW", "OY", "UH", "UW", "UX"]
+    vowel_phones = [
+        "AA",
+        "AE",
+        "AH",
+        "AO",
+        "AW",
+        "AX",
+        "AXR",
+        "AY",
+        "EH",
+        "ER",
+        "EY",
+        "IH",
+        "IX",
+        "IY",
+        "OW",
+        "OY",
+        "UH",
+        "UW",
+        "UX",
+    ]
 
     word_phones = []
     input_text_phones = [pronouncing.phones_for_word(i) for i in input_text.split()]
 
     # Download phonemizer model for OOV words, if needed
     if [] in input_text_phones:
-        phonemizer_mdl_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources", "en_us_cmudict_forward.pt")
-        if not os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources")):
-            os.mkdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources"))
+        phonemizer_mdl_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "resources",
+            "en_us_cmudict_forward.pt",
+        )
+        if not os.path.exists(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources")
+        ):
+            os.mkdir(
+                os.path.join(os.path.dirname(os.path.abspath(__file__)), "resources")
+            )
         if not os.path.exists(phonemizer_mdl_path):
-            logging.warning("Downloading phonemizer model from DeepPhonemizer library...")
+            logging.warning(
+                "Downloading phonemizer model from DeepPhonemizer library..."
+            )
             import requests
+
             file_url = "https://public-asai-dl-models.s3.eu-central-1.amazonaws.com/DeepPhonemizer/en_us_cmudict_forward.pt"
             r = requests.get(file_url, stream=True)
             with open(phonemizer_mdl_path, "wb") as f:
@@ -939,15 +1088,18 @@ def generate_adversarial_texts(input_text: str, N: int, include_partial_phrase: 
 
         # Create phonemizer object
         from dp.phonemizer import Phonemizer
+
         phonemizer = Phonemizer.from_checkpoint(phonemizer_mdl_path)
 
     for phones, word in zip(input_text_phones, input_text.split()):
         if phones != []:
             word_phones.extend(phones)
         elif phones == []:
-            logging.warning(f"The word '{word}' was not found in the pronunciation dictionary! "
-                            "Using the DeepPhonemizer library to predict the phonemes.")
-            phones = phonemizer(word, lang='en_us')
+            logging.warning(
+                f"The word '{word}' was not found in the pronunciation dictionary! "
+                "Using the DeepPhonemizer library to predict the phonemes."
+            )
+            phones = phonemizer(word, lang="en_us")
             logging.warning(f"Phones for '{word}': {phones}")
             word_phones.append(re.sub(r"[\]|\[]", "", re.sub(r"\]\[", " ", phones)))
         elif isinstance(phones[0], list):
@@ -955,7 +1107,14 @@ def generate_adversarial_texts(input_text: str, N: int, include_partial_phrase: 
             word_phones.append(phones[0])
 
     # add all possible lexical stresses to vowels
-    word_phones = [re.sub('|'.join(vowel_phones), lambda x: str(x.group(0)) + '[0|1|2]', re.sub(r'\d+', '', i)) for i in word_phones]
+    word_phones = [
+        re.sub(
+            "|".join(vowel_phones),
+            lambda x: str(x.group(0)) + "[0|1|2]",
+            re.sub(r"\d+", "", i),
+        )
+        for i in word_phones
+    ]
 
     adversarial_phrases = []
     for phones, word in zip(word_phones, input_text.split()):
@@ -965,12 +1124,18 @@ def generate_adversarial_texts(input_text: str, N: int, include_partial_phrase: 
         if len(phones) <= 2:
             query_exps.append(" ".join(phones))
         else:
-            query_exps.extend(phoneme_replacement(phones, max_replace=max(0, len(phones)-2), replace_char="(.){1,3}"))
+            query_exps.extend(
+                phoneme_replacement(
+                    phones, max_replace=max(0, len(phones) - 2), replace_char="(.){1,3}"
+                )
+            )
 
         for query in query_exps:
             matches = pronouncing.search(query)
             matches_phones = [pronouncing.phones_for_word(i)[0] for i in matches]
-            allowed_matches = [i for i, j in zip(matches, matches_phones) if j != phones]
+            allowed_matches = [
+                i for i, j in zip(matches, matches_phones) if j != phones
+            ]
             adversarial_words.extend([i for i in allowed_matches if word.lower() != i])
 
         if adversarial_words != []:
@@ -986,9 +1151,15 @@ def generate_adversarial_texts(input_text: str, N: int, include_partial_phrase: 
             else:
                 txts.append(np.random.choice(j))
 
-        if include_partial_phrase is not None and len(input_text.split()) > 1 and np.random.random() <= include_partial_phrase:
-            n_words = np.random.randint(1, len(input_text.split())+1)
-            adversarial_texts.append(" ".join(np.random.choice(txts, size=n_words, replace=False)))
+        if (
+            include_partial_phrase is not None
+            and len(input_text.split()) > 1
+            and np.random.random() <= include_partial_phrase
+        ):
+            n_words = np.random.randint(1, len(input_text.split()) + 1)
+            adversarial_texts.append(
+                " ".join(np.random.choice(txts, size=n_words, replace=False))
+            )
         else:
             adversarial_texts.append(" ".join(txts))
 
@@ -1003,13 +1174,13 @@ def phoneme_replacement(input_chars, max_replace, replace_char='"(.){1,3}"'):
     chars = list(input_chars)
 
     # iterate over the number of characters to replace (1 to max_replace)
-    for r in range(1, max_replace+1):
+    for r in range(1, max_replace + 1):
         # get all combinations for a fixed r
         comb = itertools.combinations(range(len(chars)), r)
         for indices in comb:
             chars_copy = chars.copy()
             for i in indices:
                 chars_copy[i] = replace_char
-            results.append(' '.join(chars_copy))
+            results.append(" ".join(chars_copy))
 
     return results
