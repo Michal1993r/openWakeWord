@@ -20,7 +20,7 @@ import logging
 from functools import partial
 from pathlib import Path
 import random
-from tqdm import tqdm
+from tqdm import cli, tqdm
 from typing import List, Tuple
 import numpy as np
 import itertools
@@ -759,7 +759,9 @@ def augment_clips(
                 clip_data = clip_data[0:total_length]
 
             if clip_sr != sr:
-                raise ValueError("Error! Clip does not have the correct sample rate!")
+                raise ValueError(
+                    f"Error! Clip does not have the correct sample rate! {clip}"
+                )
 
             clip_data = create_fixed_size_clip(clip_data, total_length, clip_sr)
 
